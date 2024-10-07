@@ -1,0 +1,107 @@
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+public class GaoDeMap {
+    private static final String API_KEY = "your app key";
+
+    public static void main(String[] args) {
+        String fileName = "the name of the exported sql file";
+
+        // I hope the next latitude and longitude information will be available in a few seconds.
+        int plusSecond = 10;
+
+        // Starting location latitude and longitude
+        String origin = "***,***";
+
+        // End location latitude and longitude
+        String destination = "***,***";
+        // Departure Time
+        LocalDateTime dateTime = LocalDateTime.parse("2023-01-27T23:45:00");
+        String path = getRoute(origin, destination);
+
+        StringBuilder data = new StringBuilder();
+
+        JSONObject object = new JSONObject(path.toString());
+        JSONObject route = object.getJSONObject("route");
+        JSONArray paths = route.getJSONArray("paths");
+        paths.forEach(i -> {
+            JSONObject obj = (JSONObject)i;
+            JSONArray steps = obj.getJSONArray("steps");
+            steps.forEach(o -> {
+                JSONObject obje = (JSONObject)o;
+                if (!data.toString().isEmpty()) {
+                    data.append(";");
+                }
+
+                data.append(obje.getString("polyline"));
+            });
+
+        });
+
+        List<String> strings = new ArrayList<>(Arrays.asList(data.toString().split(";")));
+
+        String time = "";
+        String j = "";
+        String w = "";
+        StringBuffer sql = new StringBuffer();
+
+        for (String string : strings) {
+            dateTime = dateTime.plusSeconds(plusSecond);
+            time = dateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            String[] split = string.split(",");
+            j = split[1];
+            w = split[0];
+            if(!sql.toString().isEmpty()) {
+                sql.append(";\n");
+            }
+
+            //
+            String template = "INSERT INTO \"public\".\"positions\" (\"date\", \"latitude\", \"longitude\", \"speed\", \"power\", \"odometer\", \"ideal_battery_range_km\", \"battery_level\", \"outside_temp\", \"elevation\", \"fan_status\", \"driver_temp_setting\", \"passenger_temp_setting\", \"is_climate_on\", \"is_rear_defroster_on\", \"is_front_defroster_on\", \"car_id\", \"drive_id\", \"inside_temp\", \"battery_heater\", \"battery_heater_on\", \"battery_heater_no_power\", \"est_battery_range_km\", \"rated_battery_range_km\", \"usable_battery_level\", \"tpms_pressure_fl\", \"tpms_pressure_fr\", \"tpms_pressure_rl\", \"tpms_pressure_rr\", \"remark\") VALUES ('" + time + "', '"+j+"', '"+w+"', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'manual supplementation');";
+            sql.append(template);
+        }
+
+        // 指定要写入的文件路径
+        String filePath = "/path/" + fileName + ".sql";
+
+        // 使用BufferedWriter写入文件
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
+            // 将StringBuffer的内容写入文件
+            writer.write(sql.toString());
+            System.out.println("内容已成功写入文件: " + filePath);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static String getRoute(String origin, String destination) {
+        String urlString = String.format("https://restapi.amap.com/v3/direction/driving?origin=%s&destination=%s&key=%s",
+                origin, destination, API_KEY);
+
+        try {
+            URL url = new URL(urlString);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+            StringBuilder response = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line);
+            }
+            reader.close();
+            return response.toString();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+}
